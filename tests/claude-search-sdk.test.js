@@ -170,15 +170,6 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
     assert.equal(existsSync(path.join(workspaceDir, 'blocked-write.txt')), false);
     scenario = 'normal';
 
-    // Closing the consumer at a tool boundary must close the real SDK iterator.
-    // No permission or transport replacement is used for cancellation.
-    const cancelled = stream({ prompt: 'Find news', workspaceDir, workspaceId: crypto.randomUUID(),
-      userId: 'fixture-user', chatMode: 'code', permissionMode: 'code' });
-    for await (const chunk of cancelled) {
-      if (chunk.type === 'tool-call' && chunk.args?.objective) break;
-    }
-    assert.equal((await cancelled.next()).done, true);
-
     // The SDK also loads user MCP declarations from HOME even without
     // settingSources. A managed default must not replace their URL/credentials.
     savedMcp = true;
@@ -193,6 +184,18 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
         assert.equal(call.headers.authorization, 'Bearer existing-fixture');
       }
     }
+
+    // Closing the consumer at a tool boundary must close the real SDK query.
+    // Run last: a request dispatched before cancellation may still reach the
+    // fixture, but must not be mistaken for a subsequent conversation's call.
+    savedMcp = false;
+    setConfigValue('CODING_AGENT_CLAUDE_CODE_SEARCH', 'parallel');
+    const cancelled = stream({ prompt: 'Find news', workspaceDir, workspaceId: crypto.randomUUID(),
+      userId: 'fixture-user', chatMode: 'code', permissionMode: 'code' });
+    for await (const chunk of cancelled) {
+      if (chunk.type === 'tool-call' && chunk.args?.objective) break;
+    }
+    assert.equal((await cancelled.next()).done, true);
   } finally {
     if (process.env.CLAUDE_SEARCH_EVIDENCE) {
       writeFileSync(process.env.CLAUDE_SEARCH_EVIDENCE, JSON.stringify({

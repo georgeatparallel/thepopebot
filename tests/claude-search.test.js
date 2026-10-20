@@ -31,11 +31,17 @@ sqlite.close();
 const { setConfigValue, setConfigSecret } = await import('../lib/db/config.js');
 const { getConfig } = await import('../lib/config.js');
 let observed;
+let closed;
 mock.module('@anthropic-ai/claude-agent-sdk', { namedExports: {
-  query: async function* ({ options }) {
+  query: ({ options }) => {
     observed = options;
-    yield { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'search', name: 'mcp__thepopebot-parallel-search__web_search' }] } };
-    yield { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'search', content: [{ type: 'text', text: 'Source: https://example.com/news' }] }] } };
+    closed = false;
+    const events = (async function* () {
+      yield { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'search', name: 'mcp__thepopebot-parallel-search__web_search' }] } };
+      yield { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'search', content: [{ type: 'text', text: 'Source: https://example.com/news' }] }] } };
+    })();
+    events.close = () => { closed = true; };
+    return events;
   },
 } });
 const { getSdkAdapter } = await import('../lib/ai/sdk-adapters/index.js');
@@ -62,6 +68,7 @@ test('normal adapter resolves fresh and saved settings without changing permissi
     assert.deepEqual(observed.disallowedTools, provider === 'native' ? undefined : ['WebSearch', 'WebFetch']);
     assert.equal(chunks[0].toolName, 'mcp__thepopebot-parallel-search__web_search');
     assert.equal(chunks[0].result, 'Source: https://example.com/news');
+    assert.equal(closed, true);
   }
   setConfigValue('CODING_AGENT_CLAUDE_CODE_SEARCH', 'invalid');
   await assert.rejects(Array.fromAsync(stream(opts)), /Unsupported/);
