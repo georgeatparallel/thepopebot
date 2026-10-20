@@ -4,7 +4,7 @@
 // are asserted before redirecting. No real model credentials are needed.
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { mock, test } from 'node:test';
@@ -55,9 +55,13 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
     const results = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : []).filter(b => b.type === 'tool_result');
     const tools = body.tools || [];
     const next = results.length === 0 ? 'web_search' : results.length === 1 && scenario === 'normal' ? 'web_fetch' : null;
-    const name = next && tools.find(t => t.name.endsWith(`__${next}`))?.name;
+    const name = scenario === 'write' && results.length === 0
+      ? tools.find(t => t.name === 'Write')?.name
+      : next && tools.find(t => t.name.endsWith(`__${next}`))?.name;
     const live = process.env.LIVE_PARALLEL_MCP === '1';
-    const content = name ? { type: 'tool_use', id: `fixture_${results.length}`, name, input: next === 'web_search'
+    const content = name ? { type: 'tool_use', id: `fixture_${results.length}`, name, input: name === 'Write'
+      ? { file_path: path.join(scratch, 'repo', 'blocked-write.txt'), content: 'must not be written in plan mode' }
+      : next === 'web_search'
       ? { objective: live ? 'Find official Node.js release documentation' : 'Find fixture news', search_queries: [live ? 'Node.js official release documentation' : 'fixture news source'] }
       : { urls: [live ? 'https://nodejs.org/en/about/previous-releases' : 'https://example.com/news'] } }
       : { type: 'text', text: results.length ? `Consumed source: ${JSON.stringify(results.at(-1).content)}` : 'No MCP search tools' };
@@ -152,8 +156,13 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
     scenario = 'normal';
     const planned = await run('parallel', 'plan');
     assert.equal(optionsSeen.at(-1).permissionMode, 'plan');
-    assert.equal(optionsSeen.at(-1).allowedTools, undefined);
-    assert.ok(planned.some(c => c.type === 'tool-result'));
+    assert.deepEqual(optionsSeen.at(-1).allowedTools, ['mcp__parallel-search__web_search', 'mcp__parallel-search__web_fetch']);
+    assert.equal(planned.filter(c => c.type === 'tool-result' && c.result.includes('fixture evidence')).length, 2);
+    scenario = 'write';
+    const writeDenied = await run('parallel', 'plan');
+    assert.ok(writeDenied.some(c => c.type === 'tool-result' && /permission|plan mode/i.test(c.result)), JSON.stringify(writeDenied));
+    assert.equal(existsSync(path.join(workspaceDir, 'blocked-write.txt')), false);
+    scenario = 'normal';
 
     // Closing the consumer at a tool boundary must close the real SDK iterator.
     // No permission or transport replacement is used for cancellation.

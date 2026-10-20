@@ -12,7 +12,7 @@ test('Claude search choices retain native tools or disable both web tools', () =
   const options = claudeSearchOptions();
   assert.equal(options.mcpServers['parallel-search'].url, 'https://search.parallel.ai/mcp');
   assert.match(options.mcpServers['parallel-search'].headers['User-Agent'], /^thepopebot /);
-  assert.equal(options.allowedTools, undefined);
+  assert.deepEqual(options.allowedTools, ['mcp__parallel-search__web_search', 'mcp__parallel-search__web_fetch']);
 });
 
 // Exercise the maintained resolver and adapter against the real settings DB.
@@ -54,7 +54,7 @@ test('normal adapter resolves fresh and saved settings without changing permissi
     setConfigValue('CODING_AGENT_CLAUDE_CODE_SEARCH', provider);
     const chunks = await Array.fromAsync(stream({ ...opts, permissionMode: mode }));
     assert.equal(observed.permissionMode, mode === 'plan' ? 'plan' : 'bypassPermissions');
-    assert.equal(observed.allowedTools, undefined);
+    assert.deepEqual(observed.allowedTools, provider === 'parallel' ? ['mcp__parallel-search__web_search', 'mcp__parallel-search__web_fetch'] : undefined);
     assert.equal(observed.env.USER_ID, opts.userId);
     assert.equal(observed.env.ANTHROPIC_API_KEY, 'fixture-provider-credential');
     assert.equal(observed.model, 'fixture-model');

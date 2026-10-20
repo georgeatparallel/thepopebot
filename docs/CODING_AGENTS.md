@@ -50,8 +50,9 @@ Config keys follow the pattern `CODING_AGENT_{BACKEND}_{SETTING}`:
     separately by the agent's permissions.
 
 An unset search choice now uses Parallel instead of Claude's native web tools.
-Saved selections apply on the next chat message; LLM credentials, model settings
-and plan/code permissions are unchanged. This setting does not configure the
+Saved selections apply on the next chat message. Parallel's two read-only web
+tools are approved in both plan and code modes; other tool permissions, LLM
+credentials and model settings are unchanged. This setting does not configure the
 interactive Docker terminal, background jobs, headless containers or other agents.
 
 ### Pi
