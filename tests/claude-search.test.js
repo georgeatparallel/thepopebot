@@ -10,9 +10,9 @@ test('Claude search choices retain native tools or disable both web tools', () =
   assert.deepEqual(claudeSearchOptions('disabled'), { disallowedTools: ['WebSearch', 'WebFetch'] });
   assert.throws(() => claudeSearchOptions('invalid'), /Unsupported/);
   const options = claudeSearchOptions();
-  assert.equal(options.mcpServers['parallel-search'].url, 'https://search.parallel.ai/mcp');
-  assert.match(options.mcpServers['parallel-search'].headers['User-Agent'], /^thepopebot /);
-  assert.deepEqual(options.allowedTools, ['mcp__parallel-search__web_search', 'mcp__parallel-search__web_fetch']);
+  assert.equal(options.mcpServers['thepopebot-parallel-search'].url, 'https://search.parallel.ai/mcp');
+  assert.match(options.mcpServers['thepopebot-parallel-search'].headers['User-Agent'], /^thepopebot /);
+  assert.deepEqual(options.allowedTools, ['mcp__thepopebot-parallel-search__web_search', 'mcp__thepopebot-parallel-search__web_fetch']);
 });
 
 // Exercise the maintained resolver and adapter against the real settings DB.
@@ -34,7 +34,7 @@ let observed;
 mock.module('@anthropic-ai/claude-agent-sdk', { namedExports: {
   query: async function* ({ options }) {
     observed = options;
-    yield { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'search', name: 'mcp__parallel-search__web_search' }] } };
+    yield { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'search', name: 'mcp__thepopebot-parallel-search__web_search' }] } };
     yield { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'search', content: [{ type: 'text', text: 'Source: https://example.com/news' }] }] } };
   },
 } });
@@ -54,13 +54,13 @@ test('normal adapter resolves fresh and saved settings without changing permissi
     setConfigValue('CODING_AGENT_CLAUDE_CODE_SEARCH', provider);
     const chunks = await Array.fromAsync(stream({ ...opts, permissionMode: mode }));
     assert.equal(observed.permissionMode, mode === 'plan' ? 'plan' : 'bypassPermissions');
-    assert.deepEqual(observed.allowedTools, provider === 'parallel' ? ['mcp__parallel-search__web_search', 'mcp__parallel-search__web_fetch'] : undefined);
+    assert.deepEqual(observed.allowedTools, provider === 'parallel' ? ['mcp__thepopebot-parallel-search__web_search', 'mcp__thepopebot-parallel-search__web_fetch'] : undefined);
     assert.equal(observed.env.USER_ID, opts.userId);
     assert.equal(observed.env.ANTHROPIC_API_KEY, 'fixture-provider-credential');
     assert.equal(observed.model, 'fixture-model');
     assert.equal(observed.mcpServers !== undefined, provider === 'parallel');
     assert.deepEqual(observed.disallowedTools, provider === 'native' ? undefined : ['WebSearch', 'WebFetch']);
-    assert.equal(chunks[0].toolName, 'mcp__parallel-search__web_search');
+    assert.equal(chunks[0].toolName, 'mcp__thepopebot-parallel-search__web_search');
     assert.equal(chunks[0].result, 'Source: https://example.com/news');
   }
   setConfigValue('CODING_AGENT_CLAUDE_CODE_SEARCH', 'invalid');

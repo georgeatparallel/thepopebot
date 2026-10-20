@@ -45,15 +45,18 @@ Config keys follow the pattern `CODING_AGENT_{BACKEND}_{SETTING}`:
     returned to the agent without silently switching providers.
   - **Claude native tools**: use the existing `WebSearch` and `WebFetch` tools,
     with their normal backend/account requirements.
-  - **Disabled**: do not register Parallel and disable native `WebSearch` and
-    `WebFetch` for these chats. Custom skills and shell/network access are governed
-    separately by the agent's permissions.
+  - **Disabled**: do not register the built-in Parallel server and disable native `WebSearch` and
+    `WebFetch` for these chats. User-configured MCP servers, custom skills and
+    shell/network access are governed separately by the agent's permissions.
 
 An unset search choice now uses Parallel instead of Claude's native web tools.
 Saved selections apply on the next chat message. Parallel's two read-only web
 tools are approved in both plan and code modes; other tool permissions, LLM
 credentials and model settings are unchanged. This setting does not configure the
 interactive Docker terminal, background jobs, headless containers or other agents.
+The built-in MCP server uses the name `thepopebot-parallel-search`; existing
+user-configured servers (including `parallel-search`) retain their own URLs and
+credentials.
 
 ### Pi
 

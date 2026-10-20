@@ -20,6 +20,7 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
   const optionsSeen = [];
   const runs = [];
   let scenario = 'normal';
+  let savedMcp = false;
   const serve = async (handler) => {
     const server = http.createServer(async (req, res) => {
       try {
@@ -32,7 +33,7 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
     return { server, url: `http://127.0.0.1:${server.address().port}` };
   };
   const mcp = await serve((req, res, body) => {
-    requests.push({ method: body.method, params: body.params, headers: req.headers });
+    requests.push({ url: req.url, method: body.method, params: body.params, headers: req.headers });
     const reply = result => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ jsonrpc: '2.0', id: body.id, result })); };
     if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
     if (body.method === 'initialize') return reply({ protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'search-fixture', version: '1' } });
@@ -57,7 +58,7 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
     const next = results.length === 0 ? 'web_search' : results.length === 1 && scenario === 'normal' ? 'web_fetch' : null;
     const name = scenario === 'write' && results.length === 0
       ? tools.find(t => t.name === 'Write')?.name
-      : next && tools.find(t => t.name.endsWith(`__${next}`))?.name;
+      : next && tools.find(t => savedMcp ? t.name === `mcp__parallel-search__${next}` : t.name.endsWith(`__${next}`))?.name;
     const live = process.env.LIVE_PARALLEL_MCP === '1';
     const content = name ? { type: 'tool_use', id: `fixture_${results.length}`, name, input: name === 'Write'
       ? { file_path: path.join(scratch, 'repo', 'blocked-write.txt'), content: 'must not be written in plan mode' }
@@ -90,11 +91,16 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
     mock.module('@anthropic-ai/claude-agent-sdk', { namedExports: {
       query: ({ prompt, options }) => {
         optionsSeen.push(options);
-        const remote = options.mcpServers?.['parallel-search'];
+        const remote = options.mcpServers?.['thepopebot-parallel-search'];
         if (remote) {
           assert.equal(remote.url, 'https://search.parallel.ai/mcp');
           assert.equal(remote.headers.Authorization, undefined);
           assert.match(remote.headers['User-Agent'], /^thepopebot /);
+        }
+        if (savedMcp) {
+          writeFileSync(path.join(options.env.HOME, '.claude.json'), JSON.stringify({ mcpServers: {
+            'parallel-search': { type: 'http', url: `${mcp.url}/saved-search`, headers: { Authorization: 'Bearer existing-fixture' } },
+          } }));
         }
         // Use an isolated HOME and credential whitelist, including for live MCP.
         const env = { PATH: process.env.PATH, HOME: options.env.HOME, USER_ID: options.env.USER_ID,
@@ -108,7 +114,7 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
         }
         env.NO_PROXY = env.no_proxy = '127.0.0.1,localhost';
         return realQuery({ prompt, options: { ...options, env, maxTurns: 4,
-          ...(remote && process.env.LIVE_PARALLEL_MCP !== '1' ? { mcpServers: { 'parallel-search': { ...remote, url: `${mcp.url}/mcp` } } } : {}),
+          ...(remote && process.env.LIVE_PARALLEL_MCP !== '1' ? { mcpServers: { 'thepopebot-parallel-search': { ...remote, url: `${mcp.url}/mcp` } } } : {}),
         } });
       },
     } });
@@ -156,7 +162,7 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
     scenario = 'normal';
     const planned = await run('parallel', 'plan');
     assert.equal(optionsSeen.at(-1).permissionMode, 'plan');
-    assert.deepEqual(optionsSeen.at(-1).allowedTools, ['mcp__parallel-search__web_search', 'mcp__parallel-search__web_fetch']);
+    assert.deepEqual(optionsSeen.at(-1).allowedTools, ['mcp__thepopebot-parallel-search__web_search', 'mcp__thepopebot-parallel-search__web_fetch']);
     assert.equal(planned.filter(c => c.type === 'tool-result' && c.result.includes('fixture evidence')).length, 2);
     scenario = 'write';
     const writeDenied = await run('parallel', 'plan');
@@ -172,6 +178,21 @@ test('Claude SDK discovers, calls and consumes the configured MCP web tools', {
       if (chunk.type === 'tool-call' && chunk.args?.objective) break;
     }
     assert.equal((await cancelled.next()).done, true);
+
+    // The SDK also loads user MCP declarations from HOME even without
+    // settingSources. A managed default must not replace their URL/credentials.
+    savedMcp = true;
+    for (const provider of ['parallel', 'native', 'disabled']) {
+      const start = requests.length;
+      const saved = await run(provider);
+      const calls = requests.slice(start).filter(r => r.method === 'tools/call');
+      assert.equal(saved.filter(c => c.type === 'tool-result' && c.toolName?.startsWith('mcp__parallel-search__') && c.result.includes('fixture evidence')).length, 2);
+      assert.deepEqual(calls.map(r => r.params.name), ['web_search', 'web_fetch']);
+      for (const call of calls) {
+        assert.equal(call.url, '/saved-search');
+        assert.equal(call.headers.authorization, 'Bearer existing-fixture');
+      }
+    }
   } finally {
     if (process.env.CLAUDE_SEARCH_EVIDENCE) {
       writeFileSync(process.env.CLAUDE_SEARCH_EVIDENCE, JSON.stringify({

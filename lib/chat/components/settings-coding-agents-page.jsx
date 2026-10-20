@@ -412,7 +412,7 @@ function ClaudeCodeCard({ settings, onReload }) {
                 <option value="disabled">Disabled</option>
               </select>
             </div>
-            <p className="text-xs text-muted-foreground">Search and page fetching in live chats. Does not change Docker agents or custom skills.</p>
+            <p className="text-xs text-muted-foreground">Built-in search and page fetching in live chats. Custom MCP servers, skills and Docker agents keep their configuration.</p>
             {searchError && <p role="alert" className="text-xs text-destructive">{searchError}</p>}
           </div>
           <div className="space-y-2">

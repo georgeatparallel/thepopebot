@@ -13,7 +13,9 @@ maintained adapter/resolver. The second launches the installed Claude SDK and
 its real Claude process against a local **scripted model API** and HTTP MCP
 fixture. It checks discovery, search, fetch, source consumption, native/disabled
 choices, plan permissions, errors, timeouts, consumer cancellation and request
-headers. Only the MCP URL is redirected after asserting the production URL.
+headers. It also verifies existing user MCP URLs and credentials under the
+`parallel-search` name survive every built-in search choice. Only the managed
+MCP URL is redirected after asserting the production URL.
 Temporary settings databases and workspace directories are removed afterward.
 These tests do not use model inference or need real model credentials.
 
